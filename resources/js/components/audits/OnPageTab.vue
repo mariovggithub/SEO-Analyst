@@ -6,6 +6,29 @@ import type { OnPageSummary } from '@/types/audit';
 const { summary } = defineProps<{
     summary: OnPageSummary;
 }>();
+
+const schemaExamples = {
+    website: `{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "Acme Consulting",
+  "url": "https://example.com"
+}`,
+    professionalService: `{
+  "@context": "https://schema.org",
+  "@type": "ProfessionalService",
+  "name": "Acme Consulting",
+  "url": "https://example.com",
+  "telephone": "+62 21 555 0100",
+  "address": {
+    "@type": "PostalAddress",
+    "addressLocality": "Jakarta",
+    "addressCountry": "ID"
+  },
+  "areaServed": "Jakarta",
+  "priceRange": "$$"
+}`,
+};
 </script>
 
 <template>
@@ -16,7 +39,7 @@ const { summary } = defineProps<{
             <div>
                 <p class="font-semibold">On-Page SEO Score</p>
                 <p class="text-muted-foreground text-sm">
-                    Based on meta tags, headings, SSL, sitemap, and image optimization.
+                    Based on meta tags, headings, SSL, sitemap, image optimization, schema markup, and local presence.
                 </p>
             </div>
         </div>
@@ -112,6 +135,274 @@ const { summary } = defineProps<{
             </div>
         </div>
 
+        <!-- Schema Markup -->
+        <div v-if="summary.schema_markup">
+            <div class="mb-3 flex items-center justify-between gap-2">
+                <h3 class="font-semibold">Schema Markup (Structured Data)</h3>
+                <span
+                    class="rounded-full px-2 py-0.5 text-xs font-medium"
+                    :class="
+                        summary.schema_markup.found
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                            : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                    "
+                >
+                    {{ summary.schema_markup.found ? 'Detected' : 'Not detected' }}
+                </span>
+            </div>
+
+            <div class="rounded-lg border border-sidebar-border/70 dark:border-sidebar-border">
+                <div class="grid grid-cols-3 divide-x divide-sidebar-border/70 dark:divide-sidebar-border">
+                    <div
+                        v-for="(count, label) in {
+                            'JSON-LD': summary.schema_markup.formats.json_ld,
+                            Microdata: summary.schema_markup.formats.microdata,
+                            RDFa: summary.schema_markup.formats.rdfa,
+                        }"
+                        :key="label"
+                        class="p-3 text-center"
+                    >
+                        <p class="text-xl font-bold">{{ count }}</p>
+                        <p class="text-muted-foreground text-xs">{{ label }}</p>
+                    </div>
+                </div>
+
+                <div
+                    v-if="summary.schema_markup.types.length > 0"
+                    class="flex flex-wrap gap-2 border-t border-sidebar-border/70 p-3 dark:border-sidebar-border"
+                >
+                    <span
+                        v-for="type in summary.schema_markup.types"
+                        :key="type"
+                        class="bg-muted rounded-full px-2 py-0.5 text-xs font-medium"
+                    >
+                        {{ type }}
+                    </span>
+                </div>
+
+                <!-- Schema type guide -->
+                <details
+                    v-if="summary.schema_markup.found"
+                    open
+                    class="border-t border-sidebar-border/70 dark:border-sidebar-border"
+                >
+                    <summary class="cursor-pointer p-3 text-sm font-medium">
+                        What is the difference between ProfessionalService
+                        and WebSite?
+                    </summary>
+                    <div class="grid gap-3 px-3 pb-3 sm:grid-cols-2">
+                        <div
+                            class="flex flex-col rounded-lg border border-sidebar-border/70 p-3 dark:border-sidebar-border"
+                        >
+                            <div class="flex items-center justify-between gap-2">
+                                <p class="text-sm font-semibold">WebSite</p>
+                                <span
+                                    class="bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                >
+                                    About the site
+                                </span>
+                            </div>
+                            <p class="text-muted-foreground mt-2 text-xs">
+                                Tells search engines about the website itself:
+                                its name, URL, language, and optional site
+                                search. It does not describe a business,
+                                service, or location.
+                            </p>
+                            <ul
+                                class="text-muted-foreground mt-2 list-disc space-y-1 pl-4 text-xs"
+                            >
+                                <li>Use once per website (usually on the homepage).</li>
+                                <li>Typical fields: <code>name</code>, <code>url</code>, <code>potentialAction</code>.</li>
+                                <li>Does <strong>not</strong> prove a Google Business Profile.</li>
+                            </ul>
+                            <pre
+                                class="mt-3 rounded bg-slate-950 p-2 text-[10px] leading-relaxed whitespace-pre-wrap text-slate-100 [overflow-wrap:anywhere]"
+                            ><code>{{ schemaExamples.website }}</code></pre>
+                        </div>
+
+                        <div
+                            class="flex flex-col rounded-lg border border-sidebar-border/70 p-3 dark:border-sidebar-border"
+                        >
+                            <div class="flex items-center justify-between gap-2">
+                                <p class="text-sm font-semibold">
+                                    ProfessionalService
+                                </p>
+                                <span
+                                    class="bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                >
+                                    About the business
+                                </span>
+                            </div>
+                            <p class="text-muted-foreground mt-2 text-xs">
+                                Describes a professional-service business
+                                (lawyer, accountant, consultant, agency, etc.).
+                                It is a subtype of <code>LocalBusiness</code>,
+                                so it carries the business name, address,
+                                phone, area served, and price range.
+                            </p>
+                            <ul
+                                class="text-muted-foreground mt-2 list-disc space-y-1 pl-4 text-xs"
+                            >
+                                <li>Use on the page that represents the business.</li>
+                                <li>Typical fields: <code>name</code>, <code>address</code>, <code>telephone</code>, <code>areaServed</code>, <code>priceRange</code>.</li>
+                                <li>Counts as a Google Business Profile signal in this audit.</li>
+                            </ul>
+                            <pre
+                                class="mt-3 rounded bg-slate-950 p-2 text-[10px] leading-relaxed whitespace-pre-wrap text-slate-100 [overflow-wrap:anywhere]"
+                            ><code>{{ schemaExamples.professionalService }}</code></pre>
+                        </div>
+                    </div>
+                    <p class="text-muted-foreground px-3 pb-3 text-xs">
+                        In short: <strong>WebSite</strong> explains the site,
+                        while <strong>ProfessionalService</strong> explains the
+                        business. Both can appear on the same page and are not
+                        duplicates.
+                    </p>
+                </details>
+
+                <div
+                    v-if="summary.schema_markup.items.length > 0"
+                    class="grid gap-3 border-t border-sidebar-border/70 p-3 sm:grid-cols-2 dark:border-sidebar-border"
+                >
+                    <div
+                        v-for="(item, i) in summary.schema_markup.items"
+                        :key="`${item.format}-${item.type}-${i}`"
+                        class="bg-muted/40 rounded-md p-2"
+                    >
+                        <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="min-w-0">
+                                <p class="text-sm font-medium">{{ item.type }}</p>
+                                <p v-if="item.name" class="text-muted-foreground truncate text-xs">
+                                    {{ item.name }}
+                                </p>
+                            </div>
+                            <span class="text-muted-foreground shrink-0 text-xs uppercase">
+                                {{ item.format.replace('_', '-') }}
+                            </span>
+                        </div>
+
+                        <details v-if="item.code" class="mt-2">
+                            <summary class="text-primary cursor-pointer text-xs font-medium">
+                                View schema code
+                            </summary>
+                            <pre
+                                class="mt-2 rounded bg-slate-950 p-3 text-[11px] leading-relaxed whitespace-pre-wrap text-slate-100 [overflow-wrap:anywhere]"
+                            ><code>{{ item.code }}</code></pre>
+                        </details>
+                    </div>
+                </div>
+
+                <p
+                    v-else
+                    class="text-muted-foreground border-t border-sidebar-border/70 p-3 text-sm dark:border-sidebar-border"
+                >
+                    No structured data found. Add JSON-LD (e.g. Organization, WebSite, Article, LocalBusiness) to help search engines understand the page.
+                </p>
+
+                <div
+                    v-if="!summary.schema_markup.valid"
+                    class="border-t border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/20"
+                >
+                    <p
+                        v-for="(error, i) in summary.schema_markup.errors"
+                        :key="i"
+                        class="text-xs text-red-700 dark:text-red-400"
+                    >
+                        {{ error }}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Google Business Profile -->
+        <div v-if="summary.google_business_profile">
+            <h3 class="mb-3 font-semibold">Google Business Profile</h3>
+            <div
+                class="rounded-lg border p-4"
+                :class="
+                    summary.google_business_profile.exists
+                        ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/20'
+                        : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/20'
+                "
+            >
+                <div class="flex items-center gap-2">
+                    <component
+                        :is="summary.google_business_profile.exists ? CheckCircle2 : XCircle"
+                        class="h-5 w-5 shrink-0"
+                        :class="
+                            summary.google_business_profile.exists
+                                ? 'text-green-500'
+                                : 'text-red-500'
+                        "
+                    />
+                    <p class="font-semibold">
+                        {{
+                            summary.google_business_profile.exists
+                                ? 'Google Business Profile detected'
+                                : 'Google Business Profile not detected'
+                        }}
+                    </p>
+                    <span
+                        v-if="summary.google_business_profile.exists"
+                        class="text-muted-foreground ml-auto text-xs capitalize"
+                    >
+                        {{ summary.google_business_profile.confidence }} confidence
+                    </span>
+                </div>
+
+                <div
+                    v-if="
+                        summary.google_business_profile.name ||
+                        summary.google_business_profile.address ||
+                        summary.google_business_profile.phone ||
+                        summary.google_business_profile.rating !== null
+                    "
+                    class="mt-3 space-y-1 text-sm"
+                >
+                    <p v-if="summary.google_business_profile.name">
+                        <span class="font-medium">Name:</span>
+                        {{ summary.google_business_profile.name }}
+                    </p>
+                    <p v-if="summary.google_business_profile.address">
+                        <span class="font-medium">Address:</span>
+                        {{ summary.google_business_profile.address }}
+                    </p>
+                    <p v-if="summary.google_business_profile.phone">
+                        <span class="font-medium">Phone:</span>
+                        {{ summary.google_business_profile.phone }}
+                    </p>
+                    <p v-if="summary.google_business_profile.rating !== null">
+                        <span class="font-medium">Rating:</span>
+                        {{ summary.google_business_profile.rating }}
+                        <span v-if="summary.google_business_profile.review_count">
+                            ({{ summary.google_business_profile.review_count }} reviews)
+                        </span>
+                    </p>
+                </div>
+
+                <div
+                    v-if="summary.google_business_profile.signals.length > 0"
+                    class="mt-3 flex flex-wrap gap-2"
+                >
+                    <span
+                        v-for="signal in summary.google_business_profile.signals"
+                        :key="signal"
+                        class="rounded-full bg-white/70 px-2 py-0.5 text-xs font-medium text-foreground dark:bg-black/30"
+                    >
+                        {{ signal }}
+                    </span>
+                </div>
+
+                <p class="text-muted-foreground mt-3 text-xs">
+                    {{
+                        summary.google_business_profile.exists
+                            ? 'Detected from public page signals such as LocalBusiness structured data, Google Maps embeds, or profile links.'
+                            : 'No public Google Business Profile signals (LocalBusiness schema, Google Maps embed, or profile link) were found on this page.'
+                    }}
+                </p>
+            </div>
+        </div>
+
         <!-- Headings -->
         <div>
             <h3 class="mb-3 font-semibold">Heading Structure</h3>
@@ -163,6 +454,14 @@ const { summary } = defineProps<{
                         {
                             label: `Image Alt Tags (${summary.images.alt_coverage}% coverage)`,
                             ok: summary.images.alt_coverage >= 80,
+                        },
+                        {
+                            label: `Schema Markup (${summary.schema_markup?.total ?? 0} found)`,
+                            ok: (summary.schema_markup?.found ?? false) && (summary.schema_markup?.valid ?? true),
+                        },
+                        {
+                            label: 'Google Business Profile',
+                            ok: summary.google_business_profile?.exists ?? false,
                         },
                     ]"
                     :key="item.label"

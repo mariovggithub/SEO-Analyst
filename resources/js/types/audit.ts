@@ -60,6 +60,7 @@ export type Technology = {
     icon: string | null;
     confidence: number | null;
     version: string | null;
+    share?: number;
 };
 
 export type TechStackSummary = {
@@ -108,6 +109,47 @@ export type RobotsTxtInfo = {
     url: string;
 };
 
+export type SchemaMarkupItem = {
+    format: 'json_ld' | 'microdata' | 'rdfa';
+    type: string;
+    types: string[];
+    name: string | null;
+    url: string | null;
+    phone: string | null;
+    address: string | null;
+    rating: number | null;
+    review_count: number | null;
+    code: string | null;
+};
+
+export type SchemaMarkupInfo = {
+    found: boolean;
+    total: number;
+    types: string[];
+    formats: {
+        json_ld: number;
+        microdata: number;
+        rdfa: number;
+    };
+    items: SchemaMarkupItem[];
+    valid: boolean;
+    errors: string[];
+    has_local_business: boolean;
+};
+
+export type GoogleBusinessProfileInfo = {
+    exists: boolean;
+    confidence: 'high' | 'medium' | 'low' | 'none';
+    signals: string[];
+    name: string | null;
+    address: string | null;
+    phone: string | null;
+    url: string | null;
+    rating: number | null;
+    review_count: number | null;
+    place_id: string | null;
+};
+
 export type OnPageSummary = {
     meta: MetaInfo;
     headings: Record<'h1' | 'h2' | 'h3', HeadingInfo>;
@@ -116,6 +158,8 @@ export type OnPageSummary = {
     robots_txt: RobotsTxtInfo;
     images: ImageInfo;
     links: LinkInfo;
+    schema_markup: SchemaMarkupInfo;
+    google_business_profile: GoogleBusinessProfileInfo;
     score: number;
 };
 
@@ -126,4 +170,3 @@ export type AuditResultItem = {
 };
 
 export type AuditResults = Record<string, AuditResultItem>;
-

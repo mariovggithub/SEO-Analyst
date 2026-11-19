@@ -34,7 +34,7 @@ class TechStackAnalyzer
                 'detected_count' => count($technologies),
             ];
         } catch (\Throwable $e) {
-            Log::warning("Native tech stack detection error: " . $e->getMessage());
+            Log::warning('Native tech stack detection error: '.$e->getMessage());
         }
 
         // 2. Try Wappalyzer CLI if available (without blocking or failing)
@@ -138,7 +138,7 @@ class TechStackAnalyzer
         if (str_contains($htmlLower, '__next') || str_contains($htmlLower, '/_next/static')) {
             $add('Next.js', ['JavaScript Frameworks', 'Web Frameworks'], null, 100, 'https://nextjs.org');
             $add('React', ['JavaScript Frameworks'], null, 100, 'https://react.dev');
-        } elseif (str_contains($htmlLower, 'react') || str_contains($htmlLower, 'react-dom') || str_contains($htmlLower, '_reactRootContainer')) {
+        } elseif (preg_match('/data-reactroot|data-reactid|_reactrootcontainer|react-dom(?:\.production)?(?:\.min)?\.js|__react_devtools_global_hook__/i', $html)) {
             $add('React', ['JavaScript Frameworks'], null, 90, 'https://react.dev');
         }
 
@@ -264,15 +264,89 @@ class TechStackAnalyzer
                     ->all();
             })
             ->groupBy('category')
-            ->map(fn ($items) => $items->pluck('tech')->unique('name')->values()->all())
+            ->map(fn ($items) => $this->assignShares(
+                $items->pluck('tech')->unique('name')->values()->all()
+            ))
             ->all();
 
         return [
-            'technologies' => $technologies,
+            'technologies' => $this->assignSharesByPrimaryCategory($technologies),
             'grouped' => $grouped,
             'count' => count($technologies),
             'score' => $this->calculateScore($technologies),
         ];
+    }
+
+    /**
+     * Attach a composition share to each technology based on its primary category.
+     *
+     * @param  array<int, array<string, mixed>>  $technologies
+     * @return array<int, array<string, mixed>>
+     */
+    private function assignSharesByPrimaryCategory(array $technologies): array
+    {
+        $groups = [];
+
+        foreach ($technologies as $index => $tech) {
+            $category = $tech['categories'][0] ?? 'Other';
+            $groups[$category][] = $index;
+        }
+
+        $result = $technologies;
+
+        foreach ($groups as $indexes) {
+            $group = array_map(fn (int $index) => $technologies[$index], $indexes);
+            $shared = $this->assignShares($group);
+
+            foreach ($indexes as $position => $index) {
+                $result[$index]['share'] = $shared[$position]['share'];
+            }
+        }
+
+        return array_values($result);
+    }
+
+    /**
+     * Distribute 100% across a group proportionally to each detection weight.
+     *
+     * @param  array<int, array<string, mixed>>  $technologies
+     * @return array<int, array<string, mixed>>
+     */
+    private function assignShares(array $technologies): array
+    {
+        if ($technologies === []) {
+            return [];
+        }
+
+        $weights = array_map(
+            fn (array $tech) => max(1, (int) ($tech['confidence'] ?? 100)),
+            $technologies,
+        );
+
+        $total = max(1, array_sum($weights));
+        $shares = [];
+        $assigned = 0;
+
+        foreach ($weights as $index => $weight) {
+            $shares[$index] = (int) round(($weight / $total) * 100);
+            $assigned += $shares[$index];
+        }
+
+        // Correct rounding drift so each category sums to exactly 100%.
+        $drift = 100 - $assigned;
+        $order = array_keys($shares);
+        usort($order, fn (int $a, int $b) => $shares[$b] <=> $shares[$a]);
+        $count = count($order);
+
+        for ($step = 0; $step < abs($drift); $step++) {
+            $shares[$order[$step % $count]] += $drift > 0 ? 1 : -1;
+        }
+
+        foreach ($technologies as $index => $tech) {
+            $technologies[$index]['share'] = $shares[$index];
+        }
+
+        return array_values($technologies);
     }
 
     /**

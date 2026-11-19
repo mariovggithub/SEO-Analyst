@@ -26,13 +26,23 @@ const { summary } = defineProps<{
             </p>
         </div>
 
+        <!-- Composition note -->
+        <p class="text-muted-foreground text-xs">
+            Percentages show each technology's share within its category. Every category totals 100%.
+        </p>
+
         <!-- Grouped Technologies -->
         <template v-if="summary.grouped && Object.keys(summary.grouped).length > 0">
             <div
                 v-for="(techs, category) in summary.grouped"
                 :key="category"
             >
-                <h3 class="mb-3 font-semibold">{{ category }}</h3>
+                <h3 class="mb-3 flex items-center justify-between font-semibold">
+                    <span>{{ category }}</span>
+                    <span class="text-muted-foreground text-xs font-normal">
+                        {{ techs.length }} detected &middot; 100%
+                    </span>
+                </h3>
                 <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     <div
                         v-for="tech in techs"
@@ -56,10 +66,10 @@ const { summary } = defineProps<{
                                     v{{ tech.version }}
                                 </span>
                                 <span
-                                    v-if="tech.confidence"
+                                    v-if="tech.share !== undefined"
                                     class="text-muted-foreground text-xs"
                                 >
-                                    {{ tech.confidence }}% confidence
+                                    {{ tech.share }}% of {{ category }}
                                 </span>
                             </div>
                         </div>
@@ -95,6 +105,9 @@ const { summary } = defineProps<{
                         <p class="text-sm font-medium">{{ tech.name }}</p>
                         <p class="text-muted-foreground text-xs">
                             {{ tech.categories.join(', ') }}
+                            <span v-if="tech.share !== undefined">
+                                &middot; {{ tech.share }}% of {{ tech.categories[0] ?? 'Other' }}
+                            </span>
                         </p>
                     </div>
                 </div>

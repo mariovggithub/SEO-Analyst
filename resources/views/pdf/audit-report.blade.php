@@ -102,6 +102,17 @@
         }
         .tech-item .name { font-weight: 600; }
         .tech-item .cat { color: #666; font-size: 10px; }
+        .schema-code {
+            background: #0f172a;
+            color: #e2e8f0;
+            border-radius: 6px;
+            padding: 8px;
+            font-size: 9px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin-bottom: 10px;
+        }
         .footer {
             margin-top: 30px;
             padding-top: 16px;
@@ -268,6 +279,133 @@
             </span>
             <span>Canonical Tag</span>
         </div>
+        <div class="check-item">
+            <span class="{{ ($onPage['schema_markup']['found'] ?? false) ? 'check-pass' : 'check-fail' }}">
+                {{ ($onPage['schema_markup']['found'] ?? false) ? '✓' : '✗' }}
+            </span>
+            <span>
+                Schema Markup
+                @if($onPage['schema_markup']['found'] ?? false)
+                    ({{ $onPage['schema_markup']['total'] ?? 0 }} item(s)@if(!empty($onPage['schema_markup']['types'])), {{ implode(', ', array_slice($onPage['schema_markup']['types'], 0, 5)) }}@endif)
+                @endif
+            </span>
+        </div>
+        <div class="check-item">
+            <span class="{{ ($onPage['google_business_profile']['exists'] ?? false) ? 'check-pass' : 'check-fail' }}">
+                {{ ($onPage['google_business_profile']['exists'] ?? false) ? '✓' : '✗' }}
+            </span>
+            <span>
+                Google Business Profile:
+                {{ ($onPage['google_business_profile']['exists'] ?? false) ? 'Available' : 'Not available' }}
+            </span>
+        </div>
+    </div>
+    @endif
+
+    @if($onPage && (!empty($onPage['schema_markup']) || !empty($onPage['google_business_profile'])))
+    <div class="section">
+        <h2>Structured Data &amp; Local Presence</h2>
+
+        @php($schema = $onPage['schema_markup'] ?? [])
+        @php($gbp = $onPage['google_business_profile'] ?? [])
+
+        <h3>Schema Markup</h3>
+        <p style="margin-bottom: 10px;">
+            {{ ($schema['found'] ?? false) ? 'Structured data detected on the page.' : 'No structured data detected on the page.' }}
+        </p>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="value">{{ $schema['total'] ?? 0 }}</div>
+                <div class="label">Total Items</div>
+            </div>
+            <div class="metric-card">
+                <div class="value">{{ $schema['formats']['json_ld'] ?? 0 }}</div>
+                <div class="label">JSON-LD</div>
+            </div>
+            <div class="metric-card">
+                <div class="value">{{ ($schema['formats']['microdata'] ?? 0) + ($schema['formats']['rdfa'] ?? 0) }}</div>
+                <div class="label">Microdata / RDFa</div>
+            </div>
+        </div>
+
+        @if(!empty($schema['types']))
+            <div class="check-item" style="flex-wrap: wrap;">
+                <strong>Types:</strong>
+                <span>{{ implode(', ', $schema['types']) }}</span>
+            </div>
+        @endif
+
+        @if(!empty($schema['items']))
+            <div class="tech-list" style="margin-top: 10px;">
+                @foreach($schema['items'] as $item)
+                <div class="tech-item">
+                    <div class="name">{{ $item['type'] }}</div>
+                    @if(!empty($item['name']))
+                    <div class="cat">{{ Str::limit($item['name'], 40) }}</div>
+                    @endif
+                    <div class="cat">{{ strtoupper(str_replace('_', '-', $item['format'])) }}</div>
+                </div>
+                @endforeach
+            </div>
+        @endif
+
+        @php($codeItems = collect($schema['items'] ?? [])->filter(fn ($item) => ! empty($item['code']))->take(3))
+        @if($codeItems->isNotEmpty())
+            <div style="background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; margin-top: 10px;">
+                <strong style="font-size: 11px;">ProfessionalService vs WebSite</strong>
+                <p style="color: #444; font-size: 10px; margin-top: 4px;">
+                    <strong>WebSite</strong> describes the website itself (name, URL, language, optional site search) and is usually placed once on the homepage.
+                    <strong>ProfessionalService</strong> describes the business behind the site (a LocalBusiness subtype) with name, address, phone, area served, and price range.
+                    Both can coexist: WebSite is not a Google Business Profile signal, while ProfessionalService is.
+                </p>
+            </div>
+
+            <h3 style="margin-top: 16px;">Schema Code Samples</h3>
+            @foreach($codeItems as $item)
+                <p style="font-size: 10px; color: #666; margin-bottom: 4px;">
+                    {{ $item['type'] }} &middot; {{ strtoupper(str_replace('_', '-', $item['format'])) }}
+                </p>
+                <pre class="schema-code">{{ Str::limit($item['code'], 1200) }}</pre>
+            @endforeach
+        @endif
+
+        @if(!($schema['valid'] ?? true))
+            <p style="color: #ef4444; margin-top: 8px;">{{ implode('; ', $schema['errors'] ?? []) }}</p>
+        @endif
+
+        <h3 style="margin-top: 16px;">Google Business Profile</h3>
+        <div class="check-item">
+            <span class="{{ ($gbp['exists'] ?? false) ? 'check-pass' : 'check-fail' }}">
+                {{ ($gbp['exists'] ?? false) ? '✓' : '✗' }}
+            </span>
+            <span>
+                <strong>{{ ($gbp['exists'] ?? false) ? 'Available' : 'Not available' }}</strong>
+                <span style="color: #666;">({{ $gbp['confidence'] ?? 'none' }} confidence)</span>
+            </span>
+        </div>
+
+        @if(!empty($gbp['name']))
+            <div class="check-item"><strong>Name:</strong> <span>{{ $gbp['name'] }}</span></div>
+        @endif
+        @if(!empty($gbp['address']))
+            <div class="check-item"><strong>Address:</strong> <span>{{ $gbp['address'] }}</span></div>
+        @endif
+        @if(!empty($gbp['phone']))
+            <div class="check-item"><strong>Phone:</strong> <span>{{ $gbp['phone'] }}</span></div>
+        @endif
+        @if(($gbp['rating'] ?? null) !== null)
+            <div class="check-item">
+                <strong>Rating:</strong>
+                <span>{{ $gbp['rating'] }}@if(!empty($gbp['review_count'])) ({{ $gbp['review_count'] }} reviews)@endif</span>
+            </div>
+        @endif
+        @if(!empty($gbp['signals']))
+            <div class="check-item" style="flex-wrap: wrap;">
+                <strong>Signals:</strong>
+                <span>{{ implode(', ', $gbp['signals']) }}</span>
+            </div>
+        @endif
     </div>
     @endif
 
