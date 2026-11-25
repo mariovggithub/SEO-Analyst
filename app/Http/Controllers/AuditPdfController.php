@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\AuditStatus;
 use App\Models\Audit;
+use App\Support\AuditReportPresenter;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Wayfinder\Attributes\Wayfinder;
@@ -25,6 +26,7 @@ class AuditPdfController extends Controller
         $html = view('pdf.audit-report', [
             'audit' => $audit,
             'results' => $results,
+            'report' => AuditReportPresenter::make($audit, $results),
         ])->render();
 
         // In production with Puppeteer / Spatie Browsershot:
