@@ -124,14 +124,18 @@ export type SchemaMarkupItem = {
 
 export type SchemaMarkupInfo = {
     found: boolean;
-    total: number;
-    types: string[];
     formats: {
         json_ld: number;
         microdata: number;
         rdfa: number;
     };
-    items: SchemaMarkupItem[];
+    format_evidence?: Record<'json_ld' | 'microdata' | 'rdfa', string | null>;
+    json_ld_blocks?: { code: string; types: string[] }[];
+    primary: SchemaMarkupItem | null;
+    /** Present on audits stored before only the primary schema was kept. */
+    total?: number;
+    types?: string[];
+    items?: SchemaMarkupItem[];
     valid: boolean;
     errors: string[];
     has_local_business: boolean;

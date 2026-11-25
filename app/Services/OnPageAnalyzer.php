@@ -266,6 +266,8 @@ class OnPageAnalyzer
         $items = [];
         $errors = [];
         $formats = ['json_ld' => 0, 'microdata' => 0, 'rdfa' => 0];
+        $formatEvidence = ['json_ld' => null, 'microdata' => null, 'rdfa' => null];
+        $jsonLdBlocks = [];
 
         foreach ($dom->getElementsByTagName('script') as $script) {
             if (strtolower(trim($script->getAttribute('type'))) !== 'application/ld+json') {
@@ -285,16 +287,34 @@ class OnPageAnalyzer
                 continue;
             }
 
+            $blockTypes = [];
+
             foreach ($this->flattenSchemaNodes($decoded) as $node) {
                 $types = $this->schemaTypes($node['@type'] ?? null);
                 if ($types === []) {
                     continue;
                 }
 
+                foreach ($types as $type) {
+                    $blockTypes[$type] = $type;
+                }
+
                 $items[] = $this->schemaItem('json_ld', $node, $types, $json);
-                $formats['json_ld']++;
+                $formatEvidence['json_ld'] ??= $this->openingTag($script);
+            }
+
+            if ($blockTypes !== []) {
+                $jsonLdBlocks[md5($json)] = [
+                    'code' => $this->truncateMarkup($json),
+                    'types' => array_values($blockTypes),
+                ];
             }
         }
+
+        $formats['json_ld'] = collect($jsonLdBlocks)
+            ->flatMap(fn (array $block) => $block['types'])
+            ->unique()
+            ->count();
 
         foreach ($dom->getElementsByTagName('*') as $element) {
             // Microdata: itemscope + itemtype
@@ -314,6 +334,7 @@ class OnPageAnalyzer
                         'code' => $this->truncateMarkup($dom->saveHTML($element) ?: null),
                     ];
                     $formats['microdata']++;
+                    $formatEvidence['microdata'] ??= $this->openingTag($element);
                 }
             }
 
@@ -335,6 +356,7 @@ class OnPageAnalyzer
                         'code' => $this->truncateMarkup($dom->saveHTML($element) ?: null),
                     ];
                     $formats['rdfa']++;
+                    $formatEvidence['rdfa'] ??= $this->openingTag($element);
                 }
             }
         }
@@ -345,26 +367,38 @@ class OnPageAnalyzer
             ->values()
             ->all();
 
-        $types = [];
-
-        foreach ($items as $item) {
-            foreach ($item['types'] as $type) {
-                $types[$type] = $type;
-            }
-        }
-
-        $types = array_values($types);
+        $primary = collect($items)->first(fn (array $item) => collect($item['types'])->contains(
+            fn (string $type) => $this->isLocalBusinessType($type)
+        )) ?? collect($items)->first(fn (array $item) => in_array('Organization', $item['types'], true))
+            ?? collect($items)->first(fn (array $item) => in_array('WebSite', $item['types'], true))
+            ?? ($items[0] ?? null);
 
         return [
-            'found' => $items !== [],
-            'total' => count($items),
-            'types' => $types,
+            'found' => $primary !== null,
             'formats' => $formats,
-            'items' => array_slice($items, 0, 25),
+            'format_evidence' => $formatEvidence,
+            'json_ld_blocks' => array_values($jsonLdBlocks),
+            'primary' => $primary,
             'valid' => $errors === [],
             'errors' => $errors,
-            'has_local_business' => collect($types)->contains(fn (string $type) => $this->isLocalBusinessType($type)),
+            'has_local_business' => collect($items)->contains(fn (array $item) => collect($item['types'])->contains(
+                fn (string $type) => $this->isLocalBusinessType($type)
+            )),
         ];
+    }
+
+    /**
+     * Capture the opening tag that proves a schema format is present.
+     */
+    private function openingTag(\DOMElement $element): ?string
+    {
+        $html = trim($element->ownerDocument?->saveHTML($element) ?: '');
+
+        if ($html === '' || ! preg_match('/^<[^>]+>/', $html, $matches)) {
+            return null;
+        }
+
+        return $this->truncateMarkup($matches[0], 300);
     }
 
     /**
@@ -596,15 +630,12 @@ class OnPageAnalyzer
         ];
 
         $localBusiness = null;
-        $schemaItems = $schema['items'] ?? [];
+        $primary = $schema['primary'] ?? ($schema['items'][0] ?? null);
 
-        if (is_array($schemaItems)) {
-            foreach ($schemaItems as $item) {
-                if (is_array($item) && $this->isLocalBusinessType((string) ($item['type'] ?? ''))) {
-                    $localBusiness = $item;
-                    break;
-                }
-            }
+        if (is_array($primary) && collect($primary['types'] ?? [$primary['type'] ?? ''])->contains(
+            fn ($type) => $this->isLocalBusinessType((string) $type)
+        )) {
+            $localBusiness = $primary;
         }
 
         if ($localBusiness !== null) {
@@ -780,10 +811,10 @@ class OnPageAnalyzer
                 'links' => ['internal' => 0, 'external' => 0, 'nofollow' => 0, 'total' => 0],
                 'schema_markup' => [
                     'found' => false,
-                    'total' => 0,
-                    'types' => [],
                     'formats' => ['json_ld' => 0, 'microdata' => 0, 'rdfa' => 0],
-                    'items' => [],
+                    'format_evidence' => ['json_ld' => null, 'microdata' => null, 'rdfa' => null],
+                    'json_ld_blocks' => [],
+                    'primary' => null,
                     'valid' => true,
                     'errors' => [],
                     'has_local_business' => false,

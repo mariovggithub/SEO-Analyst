@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { CheckCircle2, XCircle } from '@lucide/vue';
+import { computed } from 'vue';
 import ScoreGauge from './ScoreGauge.vue';
 import type { OnPageSummary } from '@/types/audit';
 
@@ -7,28 +8,45 @@ const { summary } = defineProps<{
     summary: OnPageSummary;
 }>();
 
-const schemaExamples = {
-    website: `{
-  "@context": "https://schema.org",
-  "@type": "WebSite",
-  "name": "Acme Consulting",
-  "url": "https://example.com"
-}`,
-    professionalService: `{
-  "@context": "https://schema.org",
-  "@type": "ProfessionalService",
-  "name": "Acme Consulting",
-  "url": "https://example.com",
-  "telephone": "+62 21 555 0100",
-  "address": {
-    "@type": "PostalAddress",
-    "addressLocality": "Jakarta",
-    "addressCountry": "ID"
-  },
-  "areaServed": "Jakarta",
-  "priceRange": "$$"
-}`,
-};
+// Audits stored before `primary` existed fall back to the first item.
+const primarySchema = computed(
+    () => summary.schema_markup.primary ?? summary.schema_markup.items?.[0] ?? null,
+);
+
+const schemaFormats = computed(() =>
+    (
+        [
+            ['json_ld', 'JSON-LD'],
+            ['microdata', 'Microdata'],
+            ['rdfa', 'RDFa'],
+        ] as const
+    ).map(([key, label]) => ({
+        key,
+        label,
+        count: summary.schema_markup.formats[key],
+        evidence: summary.schema_markup.format_evidence?.[key] ?? null,
+    })),
+);
+
+const jsonLdBlocks = computed(() =>
+    (summary.schema_markup.json_ld_blocks ?? []).map((block) => {
+        const parentTypeMarkers = block.types.map((type) => `"${type}"`);
+
+        return {
+            types: block.types,
+            lines: block.code.split('\n').map((text) => ({
+                text,
+                highlight:
+                    /"@type"\s*:/.test(text) &&
+                    parentTypeMarkers.some((marker) => text.includes(marker)),
+            })),
+        };
+    }),
+);
+
+const jsonLdTypes = computed(() => [
+    ...new Set((summary.schema_markup.json_ld_blocks ?? []).flatMap((block) => block.types)),
+]);
 </script>
 
 <template>
@@ -152,148 +170,110 @@ const schemaExamples = {
             </div>
 
             <div class="rounded-lg border border-sidebar-border/70 dark:border-sidebar-border">
-                <div class="grid grid-cols-3 divide-x divide-sidebar-border/70 dark:divide-sidebar-border">
+                <div class="divide-y divide-sidebar-border/70 dark:divide-sidebar-border">
                     <div
-                        v-for="(count, label) in {
-                            'JSON-LD': summary.schema_markup.formats.json_ld,
-                            Microdata: summary.schema_markup.formats.microdata,
-                            RDFa: summary.schema_markup.formats.rdfa,
-                        }"
-                        :key="label"
-                        class="p-3 text-center"
+                        v-for="format in schemaFormats"
+                        :key="format.key"
+                        class="p-3"
                     >
-                        <p class="text-xl font-bold">{{ count }}</p>
-                        <p class="text-muted-foreground text-xs">{{ label }}</p>
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-sm font-medium">{{ format.label }}</span>
+                            <span
+                                class="rounded-full px-2 py-0.5 text-xs font-medium"
+                                :class="
+                                    format.count
+                                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                        : 'bg-muted text-muted-foreground'
+                                "
+                            >
+                                {{ format.count ? `${format.count} detected` : 'Not detected' }}
+                            </span>
+                        </div>
+                        <div
+                            v-if="format.key === 'json_ld' && jsonLdTypes.length > 0"
+                            class="mt-2 flex flex-wrap gap-1"
+                        >
+                            <span
+                                v-for="type in jsonLdTypes"
+                                :key="type"
+                                class="bg-muted rounded-full px-2 py-0.5 text-xs font-medium"
+                            >
+                                {{ type }}
+                            </span>
+                        </div>
+                        <pre
+                            v-if="format.key !== 'json_ld' && format.evidence"
+                            class="mt-2 overflow-x-auto rounded border-l-4 border-yellow-400 bg-yellow-100 p-2 text-[11px] leading-relaxed whitespace-pre-wrap text-yellow-900 [overflow-wrap:anywhere] dark:bg-yellow-900/20 dark:text-yellow-200"
+                        ><code>{{ format.evidence }}</code></pre>
+                    </div>
+                </div>
+
+                <!-- JSON-LD code, one block per unique script -->
+                <div
+                    v-if="jsonLdBlocks.length > 0"
+                    class="flex flex-col gap-3 border-t border-sidebar-border/70 p-3 dark:border-sidebar-border"
+                >
+                    <div
+                        v-for="(block, bi) in jsonLdBlocks"
+                        :key="bi"
+                        class="overflow-hidden rounded-md border border-sidebar-border/70 dark:border-sidebar-border"
+                    >
+                        <div class="flex flex-wrap gap-1 border-b border-sidebar-border/70 p-2 dark:border-sidebar-border">
+                            <span
+                                v-for="type in block.types"
+                                :key="type"
+                                class="bg-muted rounded-full px-2 py-0.5 text-xs font-medium"
+                            >
+                                {{ type }}
+                            </span>
+                        </div>
+                        <pre
+                            class="max-h-80 overflow-auto bg-slate-950 p-3 text-[11px] leading-relaxed whitespace-pre-wrap text-slate-100 [overflow-wrap:anywhere]"
+                        ><code><span
+                            v-for="(line, li) in block.lines"
+                            :key="li"
+                            class="block"
+                            :class="line.highlight ? 'bg-yellow-300/90 text-slate-900' : ''"
+                        >{{ line.text || ' ' }}</span></code></pre>
                     </div>
                 </div>
 
                 <div
-                    v-if="summary.schema_markup.types.length > 0"
-                    class="flex flex-wrap gap-2 border-t border-sidebar-border/70 p-3 dark:border-sidebar-border"
+                    v-if="primarySchema"
+                    class="border-t border-sidebar-border/70 p-3 dark:border-sidebar-border"
                 >
-                    <span
-                        v-for="type in summary.schema_markup.types"
-                        :key="type"
-                        class="bg-muted rounded-full px-2 py-0.5 text-xs font-medium"
-                    >
-                        {{ type }}
-                    </span>
-                </div>
-
-                <!-- Schema type guide -->
-                <details
-                    v-if="summary.schema_markup.found"
-                    open
-                    class="border-t border-sidebar-border/70 dark:border-sidebar-border"
-                >
-                    <summary class="cursor-pointer p-3 text-sm font-medium">
-                        What is the difference between ProfessionalService
-                        and WebSite?
-                    </summary>
-                    <div class="grid gap-3 px-3 pb-3 sm:grid-cols-2">
-                        <div
-                            class="flex flex-col rounded-lg border border-sidebar-border/70 p-3 dark:border-sidebar-border"
-                        >
-                            <div class="flex items-center justify-between gap-2">
-                                <p class="text-sm font-semibold">WebSite</p>
-                                <span
-                                    class="bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                                >
-                                    About the site
-                                </span>
-                            </div>
-                            <p class="text-muted-foreground mt-2 text-xs">
-                                Tells search engines about the website itself:
-                                its name, URL, language, and optional site
-                                search. It does not describe a business,
-                                service, or location.
-                            </p>
-                            <ul
-                                class="text-muted-foreground mt-2 list-disc space-y-1 pl-4 text-xs"
-                            >
-                                <li>Use once per website (usually on the homepage).</li>
-                                <li>Typical fields: <code>name</code>, <code>url</code>, <code>potentialAction</code>.</li>
-                                <li>Does <strong>not</strong> prove a Google Business Profile.</li>
-                            </ul>
-                            <pre
-                                class="mt-3 rounded bg-slate-950 p-2 text-[10px] leading-relaxed whitespace-pre-wrap text-slate-100 [overflow-wrap:anywhere]"
-                            ><code>{{ schemaExamples.website }}</code></pre>
-                        </div>
-
-                        <div
-                            class="flex flex-col rounded-lg border border-sidebar-border/70 p-3 dark:border-sidebar-border"
-                        >
-                            <div class="flex items-center justify-between gap-2">
-                                <p class="text-sm font-semibold">
-                                    ProfessionalService
-                                </p>
-                                <span
-                                    class="bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                                >
-                                    About the business
-                                </span>
-                            </div>
-                            <p class="text-muted-foreground mt-2 text-xs">
-                                Describes a professional-service business
-                                (lawyer, accountant, consultant, agency, etc.).
-                                It is a subtype of <code>LocalBusiness</code>,
-                                so it carries the business name, address,
-                                phone, area served, and price range.
-                            </p>
-                            <ul
-                                class="text-muted-foreground mt-2 list-disc space-y-1 pl-4 text-xs"
-                            >
-                                <li>Use on the page that represents the business.</li>
-                                <li>Typical fields: <code>name</code>, <code>address</code>, <code>telephone</code>, <code>areaServed</code>, <code>priceRange</code>.</li>
-                                <li>Counts as a Google Business Profile signal in this audit.</li>
-                            </ul>
-                            <pre
-                                class="mt-3 rounded bg-slate-950 p-2 text-[10px] leading-relaxed whitespace-pre-wrap text-slate-100 [overflow-wrap:anywhere]"
-                            ><code>{{ schemaExamples.professionalService }}</code></pre>
-                        </div>
-                    </div>
-                    <p class="text-muted-foreground px-3 pb-3 text-xs">
-                        In short: <strong>WebSite</strong> explains the site,
-                        while <strong>ProfessionalService</strong> explains the
-                        business. Both can appear on the same page and are not
-                        duplicates.
-                    </p>
-                </details>
-
-                <div
-                    v-if="summary.schema_markup.items.length > 0"
-                    class="grid gap-3 border-t border-sidebar-border/70 p-3 sm:grid-cols-2 dark:border-sidebar-border"
-                >
-                    <div
-                        v-for="(item, i) in summary.schema_markup.items"
-                        :key="`${item.format}-${item.type}-${i}`"
-                        class="bg-muted/40 rounded-md p-2"
-                    >
+                    <div class="bg-muted/40 rounded-md p-2">
                         <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                             <div class="min-w-0">
-                                <p class="text-sm font-medium">{{ item.type }}</p>
-                                <p v-if="item.name" class="text-muted-foreground truncate text-xs">
-                                    {{ item.name }}
+                                <p class="text-sm font-medium">{{ primarySchema.type }}</p>
+                                <p v-if="primarySchema.name" class="text-muted-foreground truncate text-xs">
+                                    {{ primarySchema.name }}
                                 </p>
                             </div>
                             <span class="text-muted-foreground shrink-0 text-xs uppercase">
-                                {{ item.format.replace('_', '-') }}
+                                {{ primarySchema.format.replace('_', '-') }}
                             </span>
                         </div>
 
-                        <details v-if="item.code" class="mt-2">
+                        <details
+                            v-if="
+                                primarySchema.code &&
+                                (primarySchema.format !== 'json_ld' || jsonLdBlocks.length === 0)
+                            "
+                            class="mt-2"
+                        >
                             <summary class="text-primary cursor-pointer text-xs font-medium">
                                 View schema code
                             </summary>
                             <pre
                                 class="mt-2 rounded bg-slate-950 p-3 text-[11px] leading-relaxed whitespace-pre-wrap text-slate-100 [overflow-wrap:anywhere]"
-                            ><code>{{ item.code }}</code></pre>
+                            ><code>{{ primarySchema.code }}</code></pre>
                         </details>
                     </div>
                 </div>
 
                 <p
-                    v-else
+                    v-if="!primarySchema"
                     class="text-muted-foreground border-t border-sidebar-border/70 p-3 text-sm dark:border-sidebar-border"
                 >
                     No structured data found. Add JSON-LD (e.g. Organization, WebSite, Article, LocalBusiness) to help search engines understand the page.
@@ -456,7 +436,7 @@ const schemaExamples = {
                             ok: summary.images.alt_coverage >= 80,
                         },
                         {
-                            label: `Schema Markup (${summary.schema_markup?.total ?? 0} found)`,
+                            label: 'Schema Markup',
                             ok: (summary.schema_markup?.found ?? false) && (summary.schema_markup?.valid ?? true),
                         },
                         {

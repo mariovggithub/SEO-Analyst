@@ -286,7 +286,7 @@
             <span>
                 Schema Markup
                 @if($onPage['schema_markup']['found'] ?? false)
-                    ({{ $onPage['schema_markup']['total'] ?? 0 }} item(s)@if(!empty($onPage['schema_markup']['types'])), {{ implode(', ', array_slice($onPage['schema_markup']['types'], 0, 5)) }}@endif)
+                    ({{ $onPage['schema_markup']['primary']['type'] ?? $onPage['schema_markup']['items'][0]['type'] ?? 'structured data' }})
                 @endif
             </span>
         </div>
@@ -314,60 +314,67 @@
             {{ ($schema['found'] ?? false) ? 'Structured data detected on the page.' : 'No structured data detected on the page.' }}
         </p>
 
-        <div class="metrics-grid">
-            <div class="metric-card">
-                <div class="value">{{ $schema['total'] ?? 0 }}</div>
-                <div class="label">Total Items</div>
-            </div>
-            <div class="metric-card">
-                <div class="value">{{ $schema['formats']['json_ld'] ?? 0 }}</div>
-                <div class="label">JSON-LD</div>
-            </div>
-            <div class="metric-card">
-                <div class="value">{{ ($schema['formats']['microdata'] ?? 0) + ($schema['formats']['rdfa'] ?? 0) }}</div>
-                <div class="label">Microdata / RDFa</div>
-            </div>
-        </div>
+        @php($formatEvidence = $schema['format_evidence'] ?? [])
 
-        @if(!empty($schema['types']))
-            <div class="check-item" style="flex-wrap: wrap;">
-                <strong>Types:</strong>
-                <span>{{ implode(', ', $schema['types']) }}</span>
+        @foreach(['json_ld' => 'JSON-LD', 'microdata' => 'Microdata', 'rdfa' => 'RDFa'] as $key => $label)
+            <div class="check-item">
+                <strong>{{ $label }}:</strong>
+                <span>
+                    {{ ($schema['formats'][$key] ?? 0) > 0 ? ($schema['formats'][$key] ?? 0).' detected' : 'Not detected' }}
+                </span>
             </div>
-        @endif
+            @if($key === 'json_ld')
+                @php($jsonLdTypes = collect($schema['json_ld_blocks'] ?? [])->flatMap(fn ($block) => $block['types'] ?? [])->unique())
+                @if($jsonLdTypes->isNotEmpty())
+                    <div style="margin: 0 0 8px 0;">
+                        @foreach($jsonLdTypes as $type)
+                            <span style="display: inline-block; background: #e2e8f0; border-radius: 10px; padding: 1px 6px; font-size: 9px; margin-right: 4px;">{{ $type }}</span>
+                        @endforeach
+                    </div>
+                @endif
+            @elseif(!empty($formatEvidence[$key]))
+                <pre style="background: #fef9c3; color: #713f12; border-left: 4px solid #facc15; border-radius: 6px; padding: 8px; font-size: 9px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; margin-bottom: 10px;">{{ $formatEvidence[$key] }}</pre>
+            @endif
+        @endforeach
 
-        @if(!empty($schema['items']))
-            <div class="tech-list" style="margin-top: 10px;">
-                @foreach($schema['items'] as $item)
-                <div class="tech-item">
-                    <div class="name">{{ $item['type'] }}</div>
-                    @if(!empty($item['name']))
-                    <div class="cat">{{ Str::limit($item['name'], 40) }}</div>
-                    @endif
-                    <div class="cat">{{ strtoupper(str_replace('_', '-', $item['format'])) }}</div>
+        @php($jsonLdBlocks = $schema['json_ld_blocks'] ?? [])
+
+        @if(!empty($jsonLdBlocks))
+            <h3 style="margin-top: 16px;">JSON-LD Code</h3>
+            @foreach($jsonLdBlocks as $block)
+                <div style="margin-bottom: 12px;">
+                    <div style="margin-bottom: 4px;">
+                        @foreach($block['types'] ?? [] as $type)
+                            <span style="display: inline-block; background: #e2e8f0; border-radius: 10px; padding: 1px 6px; font-size: 9px; margin-right: 4px;">{{ $type }}</span>
+                        @endforeach
+                    </div>
+                    <div style="background: #0f172a; color: #e2e8f0; border-radius: 6px; padding: 8px; font-size: 9px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; font-family: monospace;">
+                        @foreach(preg_split('/\R/', Str::limit($block['code'] ?? '', 2000)) as $line)
+                            @php($highlight = (str_contains($line, '"@type"') || str_contains($line, "'@type'")) && collect($block['types'] ?? [])->contains(fn ($type) => str_contains($line, '"'.$type.'"')))
+                            <div style="{{ $highlight ? 'background: #fef08a; color: #1e293b;' : '' }}">{{ $line === '' ? ' ' : $line }}</div>
+                        @endforeach
+                    </div>
                 </div>
-                @endforeach
-            </div>
+            @endforeach
         @endif
 
-        @php($codeItems = collect($schema['items'] ?? [])->filter(fn ($item) => ! empty($item['code']))->take(3))
-        @if($codeItems->isNotEmpty())
-            <div style="background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; margin-top: 10px;">
-                <strong style="font-size: 11px;">ProfessionalService vs WebSite</strong>
-                <p style="color: #444; font-size: 10px; margin-top: 4px;">
-                    <strong>WebSite</strong> describes the website itself (name, URL, language, optional site search) and is usually placed once on the homepage.
-                    <strong>ProfessionalService</strong> describes the business behind the site (a LocalBusiness subtype) with name, address, phone, area served, and price range.
-                    Both can coexist: WebSite is not a Google Business Profile signal, while ProfessionalService is.
-                </p>
+        @php($primary = $schema['primary'] ?? ($schema['items'][0] ?? null))
+
+        @if($primary)
+            <div class="tech-list" style="margin-top: 10px;">
+                <div class="tech-item">
+                    <div class="name">{{ $primary['type'] }}</div>
+                    @if(!empty($primary['name']))
+                    <div class="cat">{{ Str::limit($primary['name'], 40) }}</div>
+                    @endif
+                    <div class="cat">{{ strtoupper(str_replace('_', '-', $primary['format'])) }}</div>
+                </div>
             </div>
 
-            <h3 style="margin-top: 16px;">Schema Code Samples</h3>
-            @foreach($codeItems as $item)
-                <p style="font-size: 10px; color: #666; margin-bottom: 4px;">
-                    {{ $item['type'] }} &middot; {{ strtoupper(str_replace('_', '-', $item['format'])) }}
-                </p>
-                <pre class="schema-code">{{ Str::limit($item['code'], 1200) }}</pre>
-            @endforeach
+            @if(!empty($primary['code']) && (($primary['format'] ?? '') !== 'json_ld' || empty($jsonLdBlocks)))
+                <h3 style="margin-top: 16px;">Schema Code</h3>
+                <pre class="schema-code">{{ Str::limit($primary['code'], 1200) }}</pre>
+            @endif
         @endif
 
         @if(!($schema['valid'] ?? true))
